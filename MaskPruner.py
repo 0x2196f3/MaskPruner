@@ -66,7 +66,7 @@ class ToolTip:
 class PixelPruner:
     def __init__(self, master):
         self.master = master
-        self.master.title("PixelPruner - Mosaic Tool")
+        self.master.title("MaskPruner - Mosaic Tool")
 
         self.showing_popup = False  # Flag to track if popup is already shown
 
@@ -87,16 +87,13 @@ class PixelPruner:
         # Settings Menu
         self.settings_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.menu_bar.add_cascade(label="Settings", menu=self.settings_menu)
-        self.auto_advance_var = tk.BooleanVar(value=False)
-        self.crop_sound_var = tk.BooleanVar(value=False)
-        self.show_welcome_var = tk.BooleanVar(value=True)
+        self.auto_advance_var = tk.BooleanVar(value=True)
+        self.crop_sound_var = tk.BooleanVar(value=True)
         self.safe_mode_var = tk.BooleanVar(value=False)
         self.default_input_folder = ""
         self.default_output_folder = ""
         self.settings_menu.add_checkbutton(label="Auto-advance", variable=self.auto_advance_var, command=self.save_settings)
         self.settings_menu.add_checkbutton(label="Modification Sound", variable=self.crop_sound_var, command=self.save_settings)
-        self.settings_menu.add_command(label="Set Defaults", command=self.show_welcome_screen)
-
         # Help Menu
         self.help_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.menu_bar.add_cascade(label="Help", menu=self.help_menu)
@@ -167,7 +164,7 @@ class PixelPruner:
         # --- Status Bar ---
         self.status_bar = tk.Frame(master, bd=1, relief=tk.SUNKEN)
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
-        self.status_label = tk.Label(self.status_bar, text="Welcome to PixelPruner - Mosaic Tool", anchor=tk.W)
+        self.status_label = tk.Label(self.status_bar, text="Welcome to MaskPruner - Mosaic Tool", anchor=tk.W)
         self.status_label.pack(side=tk.LEFT, padx=10)
         self.modified_images_label = tk.Label(self.status_bar, text="Images Modified: 0", anchor=tk.E)
         self.modified_images_label.pack(side=tk.RIGHT, padx=10)
@@ -211,8 +208,9 @@ class PixelPruner:
         self.update_safe_mode_ui()
         self.master.protocol("WM_DELETE_WINDOW", self.on_close)
         self.center_window()
-        if self.show_welcome_var.get():
-            self.show_welcome_screen()
+        
+        self.load_images_from_folder()
+
 
     def center_window(self):
         """Centers the main window on the screen."""
@@ -377,7 +375,7 @@ class PixelPruner:
         image_path = self.images[self.image_index]
         base_filename = os.path.basename(image_path)
         filename, ext = os.path.splitext(base_filename)
-        modified_filename = f"modified_{self.modification_counter}_{filename}.png"
+        modified_filename = f"{filename}.png"
         modified_filepath = os.path.join(self.output_folder, modified_filename)
         
         # Save the modified image
@@ -412,6 +410,7 @@ class PixelPruner:
         selected_folder = filedialog.askdirectory(title="Select Input Folder", initialdir=self.default_input_folder or None)
         if selected_folder:
             self.folder_path = selected_folder
+            self.default_input_folder = selected_folder
             self.load_images_from_folder()
         else:
             self.update_status("Input folder selection cancelled.")
@@ -420,6 +419,7 @@ class PixelPruner:
         selected_folder = filedialog.askdirectory(title="Select Output Folder", initialdir=self.default_output_folder or None)
         if selected_folder:
             self.output_folder = selected_folder
+            self.default_output_folder = selected_folder
             self.update_status(f"Output folder set to: {selected_folder}")
         else:
             self.update_status("Output folder selection cancelled.")
@@ -492,27 +492,18 @@ class PixelPruner:
 
     def show_about(self):
         about_text = (
-            "PixelPruner - Mosaic Tool\n\n"
+            "MaskPruner - Mosaic Tool\n\n"
             "Modified version of PixelPruner.\n"
             "Original by TheAlly and GPT4o.\n\n"
             "This version applies a circular black area to images."
         )
         messagebox.showinfo("About", about_text)
 
-    def show_welcome_screen(self):
-        # Simplified welcome screen logic
-        self.load_settings()
-        if self.default_input_folder:
-            self.folder_path = self.default_input_folder
-            self.load_images_from_folder()
-        if self.default_output_folder:
-            self.output_folder = self.default_output_folder
-
     def load_settings(self):
         """Loads user settings from a JSON file."""
         self.settings_path = os.path.join(app_path(), "usersettings.json")
         defaults = {
-            "auto_advance": False, "crop_sound": False, "show_welcome": True,
+            "auto_advance": True, "crop_sound": True,
             "safe_mode": False, "default_input_folder": "", "default_output_folder": ""
         }
         try:
@@ -524,19 +515,19 @@ class PixelPruner:
         except (json.JSONDecodeError, IOError):
             self.settings = defaults
 
-        self.auto_advance_var.set(self.settings.get("auto_advance", False))
-        self.crop_sound_var.set(self.settings.get("crop_sound", False))
-        self.show_welcome_var.set(self.settings.get("show_welcome", True))
+        self.auto_advance_var.set(self.settings.get("auto_advance", True))
+        self.crop_sound_var.set(self.settings.get("crop_sound", True))
         self.safe_mode_var.set(self.settings.get("safe_mode", False))
         self.default_input_folder = self.settings.get("default_input_folder", "")
         self.default_output_folder = self.settings.get("default_output_folder", "")
+        self.folder_path = self.default_input_folder
+        self.output_folder = self.default_output_folder
 
     def save_settings(self):
         """Saves current settings to a JSON file."""
         self.settings = {
             "auto_advance": self.auto_advance_var.get(),
             "crop_sound": self.crop_sound_var.get(),
-            "show_welcome": self.show_welcome_var.get(),
             "safe_mode": self.safe_mode_var.get(),
             "default_input_folder": self.default_input_folder,
             "default_output_folder": self.default_output_folder,

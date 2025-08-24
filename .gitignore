@@ -1,3 +1,6 @@
 venv/
+build/
+dist/
+/*.spec
 usersettings.json
 __pycache__/pruneriq.cpython-313.pyc
