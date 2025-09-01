@@ -8,11 +8,11 @@ ENTRY = "MaskPruner.py"
 OUTNAME = "MaskPruner.exe"
 
 # gather files in project root matching extensions
-exts = {".png", ".ico", ".wav"}
+exts = {".png", ".wav"}
 files = [p for p in ROOT.iterdir() if p.suffix.lower() in exts and p.is_file()]
 
 if not files:
-    print("No .png/.ico/.wav files found in project root.")
+    print("No .png/.wav files found in project root.")
 
 # build --add-data args (Windows format src;dest). Use absolute paths to be safe.
 add_args = []
@@ -23,7 +23,15 @@ for p in files:
     # Use shlex.quote for safety; subprocess will handle args list anyway
     add_args.extend(["--add-data", f"{src};{dst}"])
 
-cmd = ["pyinstaller", "--onefile", "--windowed", "--icon", "./app_icon.ico", "--name", OUTNAME] + add_args + [ENTRY]
+# Added --upx-dir to point to the project's root directory for upx.exe
+cmd = [
+    "pyinstaller",
+    "--onefile",
+    "--windowed",
+    "--icon", "./app_icon.ico",
+    "--name", OUTNAME,
+    "--upx-dir", str(ROOT)  # Use UPX from the script's directory
+] + add_args + [ENTRY]
 
 # Print command for review
 print("Running command:")

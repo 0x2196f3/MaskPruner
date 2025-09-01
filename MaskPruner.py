@@ -95,10 +95,8 @@ class MaskPruner:
         control_frame = tk.Frame(master)
         control_frame.pack(fill=tk.X, side=tk.TOP, pady=5)
 
-        tk.Label(control_frame, text="Mouse Wheel: Change selection size.").pack(side=tk.LEFT, padx=(10, 5))
-
         self.prev_button = tk.Button(control_frame, text="< Prev", command=self.load_previous_image)
-        self.prev_button.pack(side=tk.LEFT, padx=(5, 2))
+        self.prev_button.pack(side=tk.LEFT, padx=(10, 2))
         ToolTip(self.prev_button, "Load the previous image (S)")
 
         self.next_button = tk.Button(control_frame, text="Next >", command=self.load_next_image)
@@ -148,7 +146,7 @@ class MaskPruner:
         
         tk.Label(mask_frame, text="Mask Type:").pack(side=tk.LEFT)
         self.mask_type_var = tk.StringVar(value="Color")
-        self.mask_type_combo = ttk.Combobox(mask_frame, textvariable=self.mask_type_var, values=["Color", "Mosaic"], width=8)
+        self.mask_type_combo = ttk.Combobox(mask_frame, textvariable=self.mask_type_var, values=["Color", "Mosaic", "Blur"], width=8)
         self.mask_type_combo.pack(side=tk.LEFT, padx=5)
         self.mask_type_combo.bind("<<ComboboxSelected>>", self.update_mask_controls)
 
@@ -157,6 +155,14 @@ class MaskPruner:
         self.color_swatch = tk.Label(mask_frame, bg="#000000", width=2, relief="sunken")
         self.color_swatch.pack(side=tk.LEFT)
         self.mask_color = "#000000"
+
+        # --- Strength Controls ---
+        self.strength_frame = tk.Frame(mask_frame)
+        # Packed later by update_mask_controls
+        tk.Label(self.strength_frame, text="Strength:").pack(side=tk.LEFT, padx=(10, 0))
+        self.strength_var = tk.IntVar(value=50)
+        self.strength_slider = tk.Scale(self.strength_frame, from_=1, to=100, orient=tk.HORIZONTAL, variable=self.strength_var, length=200)
+        self.strength_slider.pack(side=tk.LEFT, padx=5)
 
         self.image_counter_label = tk.Label(control_frame, text="Viewing 0 of 0")
         self.image_counter_label.pack(side=tk.RIGHT, padx=(10, 20))
@@ -172,7 +178,8 @@ class MaskPruner:
         self.status_bar = tk.Frame(master, bd=1, relief=tk.SUNKEN)
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
         self.status_label = tk.Label(self.status_bar, text="Welcome to MaskPruner - Mosaic Tool", anchor=tk.W)
-        self.status_label.pack(side=tk.LEFT, padx=10)
+        self.status_label.pack(side=tk.LEFT, padx=(10, 5))
+        tk.Label(self.status_bar, text="| Mouse Wheel: Change selection size.", anchor=tk.W).pack(side=tk.LEFT, padx=(0, 10))
         self.modified_images_label = tk.Label(self.status_bar, text="Images Modified: 0", anchor=tk.E)
         self.modified_images_label.pack(side=tk.RIGHT, padx=10)
 
@@ -369,26 +376,36 @@ class MaskPruner:
         real_y2 = (oval_coords[3] - self.image_offset_y) * self.image_scale
         
         mask_type = self.mask_type_var.get()
+        strength = self.strength_var.get()
         
         if mask_type == "Color":
             draw = ImageDraw.Draw(self.modified_image)
             draw.ellipse([real_x1, real_y1, real_x2, real_y2], fill=self.mask_color)
-        elif mask_type == "Mosaic":
+        else:
+            # Common setup for Mosaic and Blur
             box = (int(real_x1), int(real_y1), int(real_x2), int(real_y2))
             region = self.current_image.crop(box)
 
-            pixel_size = 16 
-            small_region = region.resize(
-                (max(1, region.width // pixel_size), max(1, region.height // pixel_size)),
-                Resampling.NEAREST
-            )
-            mosaic_region = small_region.resize(region.size, Resampling.NEAREST)
+            if mask_type == "Mosaic":
+                # Exponential scaling for more control at lower strengths. Maps strength 1-100 to pixel size ~2-128.
+                exponent = 1 + ((strength - 1) / 99.0) * 6 
+                pixel_size = int(2 ** exponent)
+                small_region = region.resize(
+                    (max(1, region.width // pixel_size), max(1, region.height // pixel_size)),
+                    Resampling.NEAREST
+                )
+                processed_region = small_region.resize(region.size, Resampling.NEAREST)
+            
+            elif mask_type == "Blur":
+                blur_radius = (strength / 100) * 40 # Max blur radius of 40
+                processed_region = region.filter(ImageFilter.GaussianBlur(radius=blur_radius))
 
             mask = Image.new('L', region.size, 0)
             draw = ImageDraw.Draw(mask)
             draw.ellipse((0, 0, region.width, region.height), fill=255)
 
-            self.modified_image.paste(mosaic_region, box, mask)
+            self.modified_image.paste(processed_region, box, mask)
+
 
         if self.crop_sound_var.get():
             winsound.PlaySound(resource_path("click.wav"), winsound.SND_FILENAME | winsound.SND_ASYNC)
@@ -510,13 +527,16 @@ class MaskPruner:
             self.color_swatch.config(bg=self.mask_color)
 
     def update_mask_controls(self, event=None):
-        """Shows or hides the color chooser button based on mask type."""
-        if self.mask_type_var.get() == "Color":
+        """Shows or hides controls based on the selected mask type."""
+        mask_type = self.mask_type_var.get()
+        if mask_type == "Color":
             self.color_button.pack(side=tk.LEFT, padx=5)
             self.color_swatch.pack(side=tk.LEFT)
-        else:
+            self.strength_frame.pack_forget()
+        else: # Mosaic or Blur
             self.color_button.pack_forget()
             self.color_swatch.pack_forget()
+            self.strength_frame.pack(side=tk.LEFT)
 
     def show_about(self):
         about_text = (
@@ -533,7 +553,8 @@ class MaskPruner:
         defaults = {
             "auto_advance": False, "crop_sound": True,
             "input_folder": "", "output_folder": "",
-            "mask_type": "Color", "mask_color": "#000000"
+            "mask_type": "Color", "mask_color": "#000000",
+            "strength": 50
         }
         try:
             if os.path.exists(self.settings_path):
@@ -553,6 +574,8 @@ class MaskPruner:
         self.mask_type_var.set(mask_type)
         self.mask_color = self.settings.get("mask_color", "#000000")
         self.color_swatch.config(bg=self.mask_color)
+        self.strength_var.set(self.settings.get("strength", 50))
+
         self.update_mask_controls()
 
     def save_settings(self):
@@ -564,6 +587,7 @@ class MaskPruner:
             "output_folder": self.output_folder or "",
             "mask_type": self.mask_type_var.get(),
             "mask_color": self.mask_color,
+            "strength": self.strength_var.get()
         }
         try:
             with open(self.settings_path, "w") as f:
@@ -589,3 +613,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
